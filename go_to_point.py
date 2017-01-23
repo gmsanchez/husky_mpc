@@ -12,6 +12,7 @@ import math
 import mpctools as mpc
 import numpy as np
 import matplotlib.pyplot as plt
+import sys
 
 # Twist is the message type for sending movement commands.
 from geometry_msgs.msg import Twist
@@ -55,10 +56,14 @@ def ode(x,u):
 # Then get nonlinear casadi functions and the linearization.
 ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")
 
-Q = np.array([[15.0, 0.0, 0.0], [0.0, 15.0, 0.0], [0.0, 0.0, 0.1]])
-Qn = np.array([[50.0, 0.0, 0.0], [0.0, 50.0, 0.0], [0.0, 0.0, 0.1]])
-R = np.array([[25.0, 0.0], [0.0, 50.0]])
-x_ref = np.array([10,15,0])
+Q = np.array([[15.0, 0.0, 0.0], [0.0, 15.0, 0.0], [0.0, 0.0, 0.01]])
+Qn = np.array([[150.0, 0.0, 0.0], [0.0, 150.0, 0.0], [0.0, 0.0, 0.01]])
+R = np.array([[25.0, 0.0], [0.0, 25.0]])
+
+if len(sys.argv)==3:
+    x_ref = np.array([float(sys.argv[1]),float(sys.argv[2]),0])
+else:
+    x_ref = np.array([10,10,0])
 
 # Define stage cost and terminal weight.
 def lfunc(x,u):
@@ -122,7 +127,7 @@ def start():
         rospy.sleep(.1)
 
     # Rate object used to make the main loop execute at 10hz.
-    rate = rospy.Rate(50) 
+    rate = rospy.Rate(50)
     t = 0
 
     while not rospy.is_shutdown() and t<1500:
