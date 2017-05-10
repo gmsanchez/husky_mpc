@@ -49,51 +49,50 @@ def toEulerAngle(odom_msg):
     return (roll, pitch, yaw)
     
 # Define model.
-def ode(x,u):
-    # return np.array([-x[0] - (1+u[0])*x[1], (1+u[0])*x[0] + x[1] + u[1]])
-    return np.array([u[0]*np.cos(x[2]), u[0]*np.sin(x[2]), u[1]])
+# def ode(x,u):
+#     return np.array([u[0]*np.cos(x[2]), u[0]*np.sin(x[2]), u[1]])
 
 # Then get nonlinear casadi functions and the linearization.
-ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")
+# ode_casadi = mpc.getCasadiFunc(ode, [Nx,Nu], ["x","u"], funcname="f")
 
-Q = np.array([[15.0, 0.0, 0.0], [0.0, 15.0, 0.0], [0.0, 0.0, 0.01]])
-Qn = np.array([[150.0, 0.0, 0.0], [0.0, 150.0, 0.0], [0.0, 0.0, 0.01]])
-R = np.array([[25.0, 0.0], [0.0, 25.0]])
+# Q = np.array([[15.0, 0.0, 0.0], [0.0, 15.0, 0.0], [0.0, 0.0, 0.01]])
+# Qn = np.array([[150.0, 0.0, 0.0], [0.0, 150.0, 0.0], [0.0, 0.0, 0.01]])
+# R = np.array([[25.0, 0.0], [0.0, 25.0]])
 
-if len(sys.argv)==3:
-    x_ref = np.array([float(sys.argv[1]),float(sys.argv[2]),0])
-else:
-    x_ref = np.array([10,10,0])
+# if len(sys.argv)==3:
+#     x_ref = np.array([float(sys.argv[1]),float(sys.argv[2]),0])
+# else:
+#     x_ref = np.array([10,10,0])
 
 # Define stage cost and terminal weight.
-def lfunc(x,u):
-    return mpc.mtimes((x-x_ref).T,Q,(x-x_ref)) + mpc.mtimes(u.T,R,u)
-l = mpc.getCasadiFunc(lfunc, [Nx,Nu], ["x","u"], funcname="l")
+# def lfunc(x,u):
+#     return mpc.mtimes((x-x_ref).T,Q,(x-x_ref)) + mpc.mtimes(u.T,R,u)
+# l = mpc.getCasadiFunc(lfunc, [Nx,Nu], ["x","u"], funcname="l")
 
-def Pffunc(x):
-    return mpc.mtimes((x-x_ref).T,Qn,(x-x_ref))
-Pf = mpc.getCasadiFunc(Pffunc, [Nx], ["x"], funcname="Pf")
+# def Pffunc(x):
+#     return mpc.mtimes((x-x_ref).T,Qn,(x-x_ref))
+# Pf = mpc.getCasadiFunc(Pffunc, [Nx], ["x"], funcname="Pf")
 
 # Make optimizers. Note that the linear and nonlinear solvers have some common
 # arguments, so we collect those below.
-x0 = np.array([0.0,0.0,0.0*np.pi*0.5])
-Nt = 20
-u_ub = np.array([4., 1.0])
-u_lb = np.array([-4., -1.0])
+# x0 = np.array([0.0,0.0,0.0*np.pi*0.5])
+# Nt = 5
+# u_ub = np.array([4., 1.0])
+# u_lb = np.array([-4., -1.0])
 
-commonargs = dict(
-    verbosity=0,
-    l=l,
-    x0=x0,
-    Pf=Pf,
-    lb={"u" : np.tile(u_lb,(Nt,1))},
-    ub={"u" : np.tile(u_ub,(Nt,1))},
-)
-Nlin = {"t":Nt, "x":Nx, "u":Nu}
-Nnonlin = Nlin.copy()
-Nnonlin["c"] = 2 # Use collocation to discretize.
+# commonargs = dict(
+#     verbosity=0,
+#     l=l,
+#     x0=x0,
+#     Pf=Pf,
+#     lb={"u" : np.tile(u_lb,(Nt,1))},
+#     ub={"u" : np.tile(u_ub,(Nt,1))},
+# )
+# Nlin = {"t":Nt, "x":Nx, "u":Nu}
+# Nnonlin = Nlin.copy()
+# Nnonlin["c"] = 2 # Use collocation to discretize.
 
-solver = mpc.nmpc(f=ode_casadi,N=Nnonlin,Delta=Delta,**commonargs)
+# solver = mpc.nmpc(f=ode_casadi,N=Nnonlin,Delta=Delta,**commonargs)
 
 # This function will be called every time a new scan message is
 # published.
@@ -103,6 +102,9 @@ def odom_callback(odom_msg):
     # (The global keyword prevents the creation of a local variable here.)
     global ODOM
     ODOM = odom_msg
+
+Nsim = 1500
+_U = np.load('./U.npy')
 
 # This is the 'main'
 def start():
@@ -114,9 +116,6 @@ def start():
     # scan_callback will be called every time a new scan message is
     # published.
     rospy.Subscriber("odometry/filtered", Odometry, odom_callback)
-    # rospy.Subscriber("/husky_velocity_controller/odom", Odometry, odom_callback)
-    # rospy.Subscriber("/ground_truth/state", Odometry, odom_callback)
-
     # Create a publisher object for sending Twist messages to the
     # turtlebot_node's velocity topic. 
     vel_pub = rospy.Publisher('husky_velocity_controller/cmd_vel', Twist, queue_size=10)
@@ -133,19 +132,8 @@ def start():
     rate = rospy.Rate(50)
     t = 0
 
-    while not rospy.is_shutdown() and t<1500:
+    while not rospy.is_shutdown() and t<Nsim:
 
-        # Back up if the scan is bad, or if we are too close. 
-        # if math.isnan(SCAN.ranges[320]) or SCAN.ranges[320] < target:
-        #     twist.linear.x = -0.1  # forward velocity in meters/second
-        #     twist.angular.z = 0   # rotation in radians/second
-        # else:
-        #     twist.linear.x = 0.1 
-        #     twist.angular.z = 0  
-
-        # print "Range: {:.3f}".format(SCAN.ranges[320])
-
-####
         _xk = np.zeros((Nx,))
         _xk[0] = ODOM.pose.pose.position.x
         _xk[1] = ODOM.pose.pose.position.y
@@ -159,32 +147,27 @@ def start():
 
         # We can stop early if we are already close to the origin.
         # if np.sum(_xk[:2]**2) < 1e-4:
-        if np.sum((_xk[:2]-x_ref[:2])**2) < 1e-1:
-            print "At origin."# after %d iterations." % (t)
-            break
+        # if np.sum((_xk[:2]-x_ref[:2])**2) < 1e-1:
+            # print "At origin."# after %d iterations." % (t)
+            # break
 
         print "xk",_xk
 
-        solver.fixvar("x",0,_xk)
-        solver.solve()
+        # solver.fixvar("x",0,_xk)
+        # solver.solve()
 
         # Print status and make sure solver didn't fail.
-        print "%d: %s" % (t,solver.stats["status"])
+        # print "%d: %s" % (t,solver.stats["status"])
         # print "%s" % (solver.stats["status"])
-        if solver.stats["status"] != "Solve_Succeeded":
-            break
-        else:
-            solver.saveguess()
-        _uk = np.squeeze(solver.var["u",0])
-####
+        # if solver.stats["status"] != "Solve_Succeeded":
+        #     break
+        # else:
+        #     solver.saveguess()
+        _uk = _U[t,:]  # np.squeeze(solver.var["u",0])
+        print "uk",_uk
+
         twist.linear.x = _uk[0]
         twist.angular.z = _uk[1]
-#        if ODOM.pose.pose.position.x<10:
-#            twist.linear.x = 0.5
-#        else:
-#            twist.linear.x = 0.0
-#            
-#        print ODOM.pose.pose.position.x
 
         vel_pub.publish(twist) # These velocities will be applied for .6 seconds
                                # unless another command is sent before that. 
