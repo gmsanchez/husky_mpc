@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<launch>
+    <node pkg="rosbag" type="record" name="husky_multiple_setpoints" output="screen" args="-o $(find pva_estimation)/bags/topics -a"/>
+</launch>
